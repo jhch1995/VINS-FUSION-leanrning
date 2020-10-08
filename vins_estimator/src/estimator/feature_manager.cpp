@@ -568,7 +568,7 @@ void FeatureManager::removeFront(int frame_count)
     }
 }
 
-// 每个特征点视差计算
+// 每个特征点视差计算, 用于选择删除次新帧还是老帧
 double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int frame_count)
 {
     //check the second last frame is keyframe or not

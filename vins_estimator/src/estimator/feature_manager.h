@@ -25,7 +25,7 @@ using namespace Eigen;
 #include "parameters.h"
 #include "../utility/tic_toc.h"
 
-// 特征点在每一帧上的属性
+// 一个路标点在某一帧上所包含的属性
 // 它指的是空间特征点P1映射到frame1或frame2上对应的图像坐标、特征点的跟踪速度、空间坐标等属性都封装到类FeaturePerFrame中
 class FeaturePerFrame
 {
@@ -62,7 +62,7 @@ class FeaturePerFrame
     bool is_stereo;
 };
 
-// 管理一个特征点
+// 观察到该路标点的所有关键帧(共视帧集合)
 // 就特征点P1来说，它被两个帧观测到，第一次观测到P1的帧为frame1,即start_frame=1，
 // 最后一次观测到P1的帧为frame2,即endframe()=2,并把start_frame~endframe() 对应帧的属性存储起来，
 class FeaturePerId
