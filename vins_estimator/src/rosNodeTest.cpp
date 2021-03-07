@@ -89,6 +89,7 @@ void sync_process()
                 double time0 = img0_buf.front()->header.stamp.toSec();//front 返回值为队列中的第一个元素，也就是最早、最先进入队列的元素
                 double time1 = img1_buf.front()->header.stamp.toSec();
                 // 0.003s sync tolerance
+                // 左右目保证小于0.003s的同步时间
                 if(time0 < time1 - 0.003)
                 {
                     img0_buf.pop(); //将队列中最靠前位置的元素拿掉
@@ -270,6 +271,7 @@ int main(int argc, char **argv)
     第三个参数是回调函数的指针，指向回调函数来处理接收到的消息！
     第四个参数：似乎与延迟有关系，暂时不关心。（该成员函数有13重载）
     */
+    // 回调函数主要用于处理订阅的节点发出的信息，当接收到相关信息时，系统自动调用回调函数，完成数据的处理   
     ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_feature = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
     ros::Subscriber sub_img0 = n.subscribe(IMAGE0_TOPIC, 100, img0_callback);

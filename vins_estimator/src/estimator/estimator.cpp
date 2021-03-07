@@ -226,7 +226,9 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     if (solver_flag == NON_LINEAR)
     {
         mPropagate.lock();
+        // IMU预积分相关
         fastPredictIMU(t, linearAcceleration, angularVelocity);
+        // 将里程计信息发送出去
         pubLatestOdometry(latest_P, latest_Q, latest_V, t);
         mPropagate.unlock();
     }
@@ -1786,20 +1788,28 @@ void Estimator::outliersRejection(set<int> &removeIndex)
 
     }
 }
-// 使用上一时刻的姿态进行快速的imu预积分
+// 使用上一时刻的姿态进行快速的imu预积分，这里使用的是中值积分，即a和w均是中指之后的结果
 // 用来预测最新P,V,Q的姿态
 // -latest_p,latest_q,latest_v,latest_acc_0,latest_gyr_0 最新时刻的姿态。这个的作用是为了刷新姿态的输出，但是这个值的误差相对会比较大，是未经过非线性优化获取的初始值。
 void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity)
 {
+    // 已知当前时间间隔和传感器读数：加速度和角速度   这里的ba和bg似乎再k和k+1时刻使用的是一个值
     double dt = t - latest_time;
     latest_time = t;
+    // 计算k时刻的加速度
     Eigen::Vector3d un_acc_0 = latest_Q * (latest_acc_0 - latest_Ba) - g;
+    // 计算中值积分中用到的角速度
     Eigen::Vector3d un_gyr = 0.5 * (latest_gyr_0 + angular_velocity) - latest_Bg;
+    // 计算k+1时刻的Q
     latest_Q = latest_Q * Utility::deltaQ(un_gyr * dt);
+    // 计算k+1时刻的加速度
     Eigen::Vector3d un_acc_1 = latest_Q * (linear_acceleration - latest_Ba) - g;
+    // 计算中值积分中用到的加速度
     Eigen::Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+    // 计算积分结果，得到P和V
     latest_P = latest_P + dt * latest_V + 0.5 * dt * dt * un_acc;
     latest_V = latest_V + dt * un_acc;
+    // 存储当前的加速度和角速度
     latest_acc_0 = linear_acceleration;
     latest_gyr_0 = angular_velocity;
 }
