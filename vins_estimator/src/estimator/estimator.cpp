@@ -339,7 +339,8 @@ void Estimator::processMeasurements()
                     initFirstIMUPose(accVector);
                 for(size_t i = 0; i < accVector.size(); i++)
                 {
-                    double dt;//计算每次imu量测之间的dt
+                    // 计算每次imu量测之间的dt  首尾默认有相机观测帧进行对齐
+                    double dt;
                     if(i == 0)
                         dt = accVector[i].first - prevTime;
                     else if (i == accVector.size() - 1)
@@ -377,7 +378,7 @@ void Estimator::processMeasurements()
     }
 }
 
-//初始第一个imu位姿
+// 初始第一个imu位姿
 void Estimator::initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVector)
 {
     printf("init first imu pose\n");
@@ -395,9 +396,11 @@ void Estimator::initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVecto
 
     Matrix3d R0 = Utility::g2R(averAcc);
     double yaw = Utility::R2ypr(R0).x();
+
     // 这步操作有点迷了 正常这里的yaw角应该为0了吧
     R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;//另初始的航向为0
     Rs[0] = R0;
+
     cout << "init R0 " << endl << Rs[0] << endl;
     //Vs[0] = Vector3d(5, 0, 0);
 }
@@ -422,30 +425,30 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
         gyr_0 = angular_velocity;
     }
 
-    // 如果是新的一帧,则新建一个预积分项目
+    // 如果是新的一个图像帧,则新建一个预积分项目
     if (!pre_integrations[frame_count])
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
 
-    //f rame_count是窗内图像帧的计数
-    // 一个窗内有是个相机帧，每个相机帧之间又有多个IMU数据
-    if (frame_cobunt != 0)
+    // frame_count是窗内相机帧的计数
+    // 一个窗内有多个相机帧，每个相机帧之间又有多个IMU数据，这里主要完成的是当下相机帧的一个与积分操作
+    if (frame_count != 0)
     {
+        // 没来一个IMU帧信息，push进去，进行propagate
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
-        // push_back进行了重载，的时候就已经进行了预积分
 
         //if(solver_flag != NON_LINEAR)
-            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);//这个是输入到图像中的预积分值
+            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
 
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 
-        // 对位移速度等进行累加
+        // 对位移速度等进行累加，中值积分操作
         // Rs Ps Vs是frame_count这一个图像帧开始的预积分值,是在绝对坐标系下的.
         int j = frame_count;         
-        Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;//移除了偏执的加速度
+        Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;// 去掉了偏置的加速度
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];//移除了偏执的gyro
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
