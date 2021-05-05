@@ -67,6 +67,7 @@ void FeatureTracker::setMask()
     mask = cv::Mat(row, col, CV_8UC1, cv::Scalar(255)); // 标记点的图像
 
     // 保存长时间跟踪到的特征点 prefer to keep features that are tracked for long time
+    // ids保存的是帧与帧之间角点的匹配关系
     vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;// 帧id，点位置和点id
     for (unsigned int i = 0; i < cur_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(cur_pts[i], ids[i])));//把追踪得到的点track_cnt放入cnt_pts_id
@@ -95,8 +96,9 @@ void FeatureTracker::setMask()
             /*在已跟踪到角点的位置上，将mask对应位置上设为0,
             意为在cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
             进行操作时在该点不再重复进行角点检测，这样可以使角点分布更加均匀
-            TODO:讲动态的特征点,也设置为这个
-            图片，点，半径，颜色为0表示在角点检测在该点不起作用,粗细（-1）表示填充*/
+            TODO:将动态的特征点,也设置为这个*/
+            // circle函数参数： 图片，点，半径，颜色为0表示在角点检测在该点不起作用,粗细（-1）表示填充
+            // 在mask上画一个以it.second.first为圆心，MIN_DIST为半径的填充圆(填充颜色为0)
             cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
         }
         // TODO:这里应该输出一下mask  看看效果
@@ -147,14 +149,16 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 1); 
             //迭代算法的终止条件
             cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
-                
-            int succ_num = 0;//成功和上一阵匹配的数目
+
+            //成功和上一阵匹配的数目    
+            int succ_num = 0;
             for (size_t i = 0; i < status.size(); i++)
             {
                 if (status[i])
                     succ_num++;
             }
-            if (succ_num < 10)//小于10时，好像会扩大搜索，输入的基于最大金字塔层次数为3
+            //前后两帧的匹配数目过小，扩大搜索范围，输入的基于最大金字塔层次数为3
+            if (succ_num < 10)
                cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 3);
         }
         else 
@@ -194,6 +198,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         printf("track cnt %d\n", (int)ids.size());
     }
 
+    // 跟踪上数目统计
     for (auto &n : track_cnt)
         n++;
 
@@ -203,13 +208,15 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         // rejectWithF();
         ROS_DEBUG("set mask begins");
         TicToc t_m;
+
         setMask();
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
         ROS_DEBUG("detect feature begins");
         TicToc t_t;
 
-        // 如果当前图像的特征点cur_pts数目小于规定的最大特征点数目MAX_CNT，则进行提取
+        // 如果当前图像的特征点cur_pts数目小于规定的最大特征点数目MAX_CNT，则进行提取 
+        // 这里已产生一个mask的全局变量，以提取到的特征点
         int n_max_cnt = MAX_CNT - static_cast<int>(cur_pts.size()); // 在图像上所需要提取的特征点最大值
         if (n_max_cnt > 0)
         {
@@ -227,10 +234,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             blockSize：计算协方差矩阵时的窗口大小
             useHarrisDetector：指示是否使用Harris角点检测，如不指定，则计算shi-tomasi角点
             harrisK：Harris角点检测需要的k值 */
+            // 补齐不够的特征点，在这些点在mask区域上进行提取，相当于有目的的加速计算
             cv::goodFeaturesToTrack(cur_img, n_pts, MAX_CNT - cur_pts.size(), 0.01, MIN_DIST, mask);
-            // mask 这里肯定是指定感兴趣区，如不需在整幅图上寻找角点，则用此参数指定ROI
         }
         else
+            // 不需要新提取特征点
             n_pts.clear();
         ROS_DEBUG("detect feature costs: %f ms", t_t.toc());
 
@@ -244,9 +252,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         //printf("feature cnt after add %d\n", (int)ids.size());
     }
 
-    cur_un_pts = undistortedPts(cur_pts, m_camera[0]); //当前帧不失真的点
+    // 得到当前帧去畸变下的归一化像素坐标
+    cur_un_pts = undistortedPts(cur_pts, m_camera[0]); 
     pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
 
+    // 正常单目到这里就结束了
     // ---------------如果是双目的
     if(!_img1.empty() && stereo_cam) 
         // 把左目的点在右目上找到，然后计算右目上的像素速度。
@@ -349,8 +359,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
 
         Eigen::Matrix<double, 7, 1> xyz_uv_velocity;
         xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
-        featureFrame[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
         // 特征点的id，相机id（0或1） 和 xyz_uv_velocity（特征点空间坐标，像素坐标和像素速度）
+        featureFrame[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
     }
 
     // ---------
@@ -536,8 +546,8 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
 
     // ------------将两幅图像进行拼接
     if (!imRight.empty() && stereo_cam)
-        cv::hconcat(imLeft, imRight, imTrack);
         // 图像凭借hconcat（B,C，A）; // 等同于A=[B  C]
+        cv::hconcat(imLeft, imRight, imTrack);
     else
         imTrack = imLeft.clone();
     cv::cvtColor(imTrack, imTrack, CV_GRAY2RGB);
@@ -571,8 +581,8 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
         mapIt = prevLeftPtsMap.find(id);
         if(mapIt != prevLeftPtsMap.end())
         {
-            cv::arrowedLine(imTrack, curLeftPts[i], mapIt->second, cv::Scalar(0, 255, 0), 1, 8, 0, 0.2);
             // 在imTrack上，从curLeftPts到mapIt->second画箭头
+            cv::arrowedLine(imTrack, curLeftPts[i], mapIt->second, cv::Scalar(0, 255, 0), 1, 8, 0, 0.2);
         }
     }
 

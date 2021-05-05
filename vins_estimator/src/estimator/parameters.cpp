@@ -35,7 +35,7 @@ double TD; // 输入的相机和imu时间的差值
 int NUM_OF_CAM;//相机数目
 int STEREO;
 int USE_IMU;
-int MULTIPLE_THREAD;
+int MULTIPLE_THREAD; // 这个变量要仔细看下！！！
 map<int, Eigen::Vector3d> pts_gt; // 这个也没有赋值
 std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK; // 这个并没有赋值！！

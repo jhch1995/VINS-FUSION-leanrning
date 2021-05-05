@@ -176,9 +176,9 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     // 数据格式为feature_id camera_id（0或1） xyz_uv_velocity（空间坐标，像素坐标和像素速度）
 
-    TicToc featureTrackerTime;
     // 特征追踪所用的时间 这个很好用啊！！
-
+    TicToc featureTrackerTime;
+    
     if(_img1.empty())
         featureFrame = featureTracker.trackImage(t, _img);// 追踪单目
     else
@@ -294,7 +294,7 @@ bool Estimator::IMUAvailable(double t)
         return false;
 }
 
-//处理量测的线程
+//处理观测的线程
 void Estimator::processMeasurements()
 {
     while (1)
@@ -306,11 +306,14 @@ void Estimator::processMeasurements()
         //处理特征点的buf
         if(!featureBuf.empty())
         {            
-            feature = featureBuf.front();//.front()返回当前vector容器中起始元素的引用。
-            curTime = feature.first + td;//td的使用是在图像的时间上加上这个值
+            // 本身是个queue  返回最早被压入队列的元素
+            feature = featureBuf.front();
+            // 加上一个时间的误差补偿
+            curTime = feature.first + td;
             while(1)
             {
-                if ((!USE_IMU  || IMUAvailable(feature.first + td)))//如果不用imu或者
+                // 如果不用imu或者IMU不可用
+                if ((!USE_IMU  || IMUAvailable(feature.first + td)))
                     break;
                 else
                 {
@@ -323,10 +326,10 @@ void Estimator::processMeasurements()
             }
             mBuf.lock();
             if(USE_IMU)
-                // 对imu的时间进行判断，讲队列里的imu数据放入到accVector和gyrVector中，完成之后返回true
+                // 对imu的时间进行判断，将队列里的(时间从prevTime～curTime时间范围内的)imu数据放入到accVector和gyrVector中，完成之后返回true
                 getIMUInterval(prevTime, curTime, accVector, gyrVector);
 
-            featureBuf.pop();//每次运行完之后都删除featureBuf中的元素，直到为空，已经把要删除的这个值给了feature
+            featureBuf.pop();
             mBuf.unlock();
 
             // 处理imu数据，运行processIMU
@@ -392,6 +395,7 @@ void Estimator::initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVecto
 
     Matrix3d R0 = Utility::g2R(averAcc);
     double yaw = Utility::R2ypr(R0).x();
+    // 这步操作有点迷了 正常这里的yaw角应该为0了吧
     R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;//另初始的航向为0
     Rs[0] = R0;
     cout << "init R0 " << endl << Rs[0] << endl;
