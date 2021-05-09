@@ -65,7 +65,7 @@ class IntegrationBase
             propagate(dt_buf[i], acc_buf[i], gyr_buf[i]);
     }
 
-    // 中值积分递推Jacobian和Covariance
+    // 中值积分递推Jacobian和Covariance  实际上IMU的帧率是高于dt的，因此在dt时间内需要完成协方差的状态更新
     // _acc_0上次测量加速度 _acc_1本次测量加速度 delta_p上一次的位移 result_delta_p位置变化量计算结果 update_jacobian是否更新雅克比
     void midPointIntegration(double _dt, 
                             const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
@@ -88,6 +88,8 @@ class IntegrationBase
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
 
+        // 预积分期间的协方差传递模型，根据误差变量的线性化规则，其传递方程可表示为：eik = Fk-1 * eik-1 + Gk-1 * nk-1
+        // 即误差的传递分为两部分：当前时刻的误差传递给下一时刻，当前时刻测量噪声传递给下一时刻。 协方差矩阵也是由这两部分构成(15维误差变量协方差矩阵)
         if(update_jacobian)
         {
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
@@ -162,6 +164,7 @@ class IntegrationBase
         Vector3d result_linearized_ba;//bias
         Vector3d result_linearized_bg;
 
+        // 相对量的预计分值，通过剥离首帧绝对坐标系的变换，构建相邻IMU帧的预计分量。可以避免每次状态更新的重复更新计算
         midPointIntegration(_dt, acc_0, gyr_0, _acc_1, _gyr_1, delta_p, delta_q, delta_v,
                             linearized_ba, linearized_bg,
                             result_delta_p, result_delta_q, result_delta_v,
@@ -171,7 +174,7 @@ class IntegrationBase
         //checkJacobian(_dt, acc_0, gyr_0, acc_1, gyr_1, delta_p, delta_q, delta_v,
         //                    linearized_ba, linearized_bg);
 
-        // 让此时刻的值等于上一时刻的值，为下一次计算做准备
+        // 让此时刻的值等于上一时刻的值，为下一次计算做准备，避免重复计算
         delta_p = result_delta_p;
         delta_q = result_delta_q;
         delta_v = result_delta_v;
@@ -303,7 +306,7 @@ class IntegrationBase
 
     }     
 
-
+    // 看来作者为了验证自己雅克比计算的是否正确做了检验的操作，具体的可以在看下这里！！！！！！
     void checkJacobian(double _dt, const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0, 
                                    const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1,
                             const Eigen::Vector3d &delta_p, const Eigen::Quaterniond &delta_q, const Eigen::Vector3d &delta_v,

@@ -357,6 +357,7 @@ void Estimator::processMeasurements()
 
             printStatistics(*this, 0);
 
+            // 通过ros的message方式，将信息发布出去。
             std_msgs::Header header;
             header.frame_id = "world";
             header.stamp = ros::Time(feature.first);
@@ -439,6 +440,7 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
 
         //if(solver_flag != NON_LINEAR)
+            // 这里是送入processImage中的预计分项
             tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
 
         dt_buf[frame_count].push_back(dt);
@@ -466,10 +468,10 @@ void Estimator::processImage
 (const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header)
 // image 里边放的就是该图像的特征点 header 时间
 {
-    ROS_DEBUG("new image coming ------------------------------------------");//输入进来的其实只有特征点
+    ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
 
-    // 检测关键帧
+    // 添加特征点检测视差
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
     {
         marginalization_flag = MARGIN_OLD;//新一阵将被作为关键帧!
@@ -487,6 +489,7 @@ void Estimator::processImage
     Headers[frame_count] = header;
 
     ImageFrame imageframe(image, header);
+    // 送入图像中的预计分项目，来自processIMU函数
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header, imageframe));
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
@@ -497,9 +500,11 @@ void Estimator::processImage
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
         if (frame_count != 0)
         {
-            vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
             // 这个里边放的是新图像和上一帧
+            vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
+            
             Matrix3d calib_ric;
+            // initial_ex_rotation是一个用于估计外参校准的对象 输入: 相邻两帧的特征点对应关系，预计分量的相邻的delta_q 输出一个变换
             if (initial_ex_rotation.CalibrationExRotation(corres, pre_integrations[frame_count]->delta_q, calib_ric))
             {
                 ROS_WARN("initial extrinsic rotation calib success");

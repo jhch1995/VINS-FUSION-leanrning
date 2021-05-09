@@ -74,7 +74,7 @@ bool FeatureManager::addFeatureCheckParallax
     {
         FeaturePerFrame f_per_fra(id_pts.second[0].second, td);//每一帧的的属性
 
-        assert(id_pts.second[0].first == 0);//如果它的条件返回错误，则终止程序执行
+        assert(id_pts.second[0].first == 0);
         // 如果双目
         if(id_pts.second.size() == 2)
         {
